@@ -1,3 +1,3 @@
-# Learning GrapghQL with alx
+# Learning GraphQL with alx
 
 ### Seems intersting but it is hard
