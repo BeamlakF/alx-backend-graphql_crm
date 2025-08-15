@@ -3,7 +3,9 @@ from graphene_django import DjangoObjectType
 from .models import Customer, Product, Order
 import re
 from django.db import transaction
-
+from django.utils import timezone
+import django_filters
+from graphene_django.filter import DjangoFilterConnectionField
 
 
 # === GraphQL Types ===
@@ -25,11 +27,42 @@ class OrderType(DjangoObjectType):
         fields = ("id", "customer", "products", "total_amount", "order_date")
 
 
-# === Query Class ===
+class CustomerFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(lookup_expr='icontains')
+    email = django_filters.CharFilter(lookup_expr='icontains')
+    phone = django_filters.CharFilter(lookup_expr='icontains')
+
+    class Meta:
+        model = Customer
+        fields = ['name', 'email', 'phone']
+
+
+class ProductFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(lookup_expr='icontains')
+    price_min = django_filters.NumberFilter(field_name='price', lookup_expr='gte')
+    price_max = django_filters.NumberFilter(field_name='price', lookup_expr='lte')
+
+    class Meta:
+        model = Product
+        fields = ['name', 'price']
+
+
+class OrderFilter(django_filters.FilterSet):
+    customer_name = django_filters.CharFilter(field_name='customer__name', lookup_expr='icontains')
+    min_total = django_filters.NumberFilter(field_name='total_amount', lookup_expr='gte')
+    max_total = django_filters.NumberFilter(field_name='total_amount', lookup_expr='lte')
+    start_date = django_filters.DateFilter(field_name='order_date', lookup_expr='gte')
+    end_date = django_filters.DateFilter(field_name='order_date', lookup_expr='lte')
+
+    class Meta:
+        model = Order
+        fields = ['customer_name', 'min_total', 'max_total', 'start_date', 'end_date']
+
 class Query(graphene.ObjectType):
-    all_customers = graphene.List(CustomerType)
-    all_products = graphene.List(ProductType)
-    all_orders = graphene.List(OrderType)
+    all_customers = DjangoFilterConnectionField(CustomerType, filterset_class=CustomerFilter)
+    all_products = DjangoFilterConnectionField(ProductType, filterset_class=ProductFilter)
+    all_orders = DjangoFilterConnectionField(OrderType, filterset_class=OrderFilter)
+
 
     def resolve_all_customers(root, info):
         return Customer.objects.all()
@@ -141,8 +174,55 @@ class CreateProduct(graphene.Mutation):
 
         return CreateProduct(product=product, message="Product created successfully.")
 
+class CreateOrderInput(graphene.InputObjectType):
+    customer_id = graphene.ID(required=True)
+    product_ids = graphene.List(graphene.ID, required=True)
+    order_date = graphene.DateTime(required=False)  # optional
+
+
+class CreateOrder(graphene.Mutation):
+    class Arguments:
+        input = CreateOrderInput(required=True)
+
+    order = graphene.Field(lambda: OrderType)
+    message = graphene.String()
+
+    def mutate(root, info, input):
+        # Validate customer exists
+        try:
+            customer = Customer.objects.get(id=input.customer_id)
+        except Customer.DoesNotExist:
+            raise Exception(f"Customer ID {input.customer_id} does not exist.")
+
+        # Validate product IDs
+        products = Product.objects.filter(id__in=input.product_ids)
+        if not products.exists():
+            raise Exception("No valid products provided.")
+        if len(products) != len(input.product_ids):
+            invalid_ids = set(input.product_ids) - set(str(p.id) for p in products)
+            raise Exception(f"Invalid product IDs: {', '.join(invalid_ids)}")
+
+        # Set order_date or default to now
+        order_date = input.order_date or timezone.now()
+
+        # Calculate total_amount
+        total_amount = sum(p.price for p in products)
+
+        # Create Order
+        order = Order.objects.create(
+            customer=customer,
+            total_amount=total_amount,
+            order_date=order_date
+        )
+        order.products.set(products)
+
+        return CreateOrder(order=order, message="Order created successfully.")
+
+
+
 
 class Mutation(graphene.ObjectType):
     create_customer = CreateCustomer.Field()
     bulk_create_customers = BulkCreateCustomers.Field()
     create_product = CreateProduct.Field()
+    create_order = CreateOrder.Field()
