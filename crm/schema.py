@@ -1,6 +1,9 @@
 import graphene
 from graphene_django import DjangoObjectType
 from .models import Customer, Product, Order
+import re
+
+
 
 
 # === GraphQL Types ===
@@ -36,3 +39,39 @@ class Query(graphene.ObjectType):
 
     def resolve_all_orders(root, info):
         return Order.objects.select_related("customer").prefetch_related("products").all()
+
+class CustomerInput(graphene.InputObjectType):
+    name = graphene.String(required=True)
+    email = graphene.String(required=True)
+    phone = graphene.String(required=False)
+
+# === CreateCustomer Mutation ===
+class CreateCustomer(graphene.Mutation):
+    class Arguments:
+        input = CustomerInput(required=True)
+
+    customer = graphene.Field(lambda: CustomerType)
+    message = graphene.String()
+
+    def mutate(root, info, input):
+        # Email uniqueness check
+        if Customer.objects.filter(email=input.email).exists():
+            raise Exception("Email already exists.")
+
+        # Optional phone validation
+        if input.phone:
+            phone_pattern = re.compile(r'^(\+\d{10,15}|\d{3}-\d{3}-\d{4})$')
+            if not phone_pattern.match(input.phone):
+                raise Exception("Invalid phone format.")
+
+        customer = Customer(
+            name=input.name,
+            email=input.email,
+            phone=input.phone
+        )
+        customer.save()
+
+        return CreateCustomer(customer=customer, message="Customer created successfully.")
+    
+class Mutation(graphene.ObjectType):
+    create_customer = CreateCustomer.Field()
