@@ -91,6 +91,8 @@ GRAPHENE = {
 # Cron jobs
 CRONJOBS = [
     ("*/5 * * * *", "crm.cron.log_crm_heartbeat"),  # heartbeat logger
-    # Later: add stock updater
-    # ("0 */12 * * *", "crm.cron.update_low_stock"),
+   
+    ("*/5 * * * *", "crm.cron.log_crm_heartbeat"),   # Task 2
+    ("0 */12 * * *", "crm.cron.update_low_stock"),   # Task 3
 ]
+
