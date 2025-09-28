@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 import django_filters
 from graphene_django.filter import DjangoFilterConnectionField
-
+from crm.models import Product 
 
 # Define ProductType for GraphQL
 class ProductType(DjangoObjectType):
