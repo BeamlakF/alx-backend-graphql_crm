@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from celery.schedules import crontab
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,22 @@ INSTALLED_APPS = [
 
     # Your CRM app(s)
     "crm",
+    "django_celery_beat",
 ]
+
+
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_BEAT_SCHEDULE = {
+    "generate-crm-report": {
+        "task": "crm.tasks.generate_crm_report",
+        "schedule": {
+            "day_of_week": "mon",
+            "hour": 6,
+            "minute": 0
+        },
+    },
+}
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
